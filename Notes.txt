@@ -1,0 +1,42 @@
+The client supports both download and upload tests:
+
+Download test uses iperf3 with -R flag (reverse mode)
+Upload test uses normal iperf3 client mode
+Both use 4 parallel streams (-P 4) and 100M bandwidth limit (-b 100M)
+
+
+For each test:
+
+Runs iperf3 command
+Reads output in real-time
+Looks for [SUM] line with total bytes
+Converts MBytes to bytes
+Updates appropriate TR-181 parameters
+
+
+To build and install:
+
+bashCopygcc -o speedtest-client speedtest-client.c
+sudo cp speedtest-client /usr/bin/
+sudo chmod 755 /usr/bin/speedtest-client
+
+To use:
+
+bashCopyspeedtest-client <iperf3_server_ip>
+
+Parameters updated:
+
+
+For download:
+CopyDevice.IP.Diagnostics.DownloadDiagnostics.TestBytesReceived
+Device.IP.Diagnostics.DownloadDiagnostics.TotalBytesReceived
+
+For upload:
+CopyDevice.IP.Diagnostics.UploadDiagnostics.TotalBytesSent
+
+
+
+Sample output parsing:
+
+CopyInput: [SUM] 0.00-60.00 sec 674 MBytes 94.2 Mbits/sec receiver
+Parsed: 674 MBytes → 706,973,696 bytes
