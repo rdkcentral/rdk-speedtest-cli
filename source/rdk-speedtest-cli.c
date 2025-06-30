@@ -30,6 +30,8 @@
 #include <rbus/rbuscore.h>
 #include <rbus/rbus.h>
 #include <rtmessage/rtMessageHeader.h>
+#include <string.h>
+#include <stdlib.h>
 
 
 #define LOG_FILE            "/rdklogs/logs/TDMlog.txt.0"
@@ -95,24 +97,71 @@ void run_rbus(int value)
      rbus_close(handle);
 
 }
+
+// Parse bandwidth with units (iperf3 style) or plain number (speedtest-client style)
+int parse_bandwidth(const char* bandwidth_str, uint64_t* bitrate_mbps) {
+    char* endptr;
+    double value = strtod(bandwidth_str, &endptr);
+    
+    if (endptr == bandwidth_str) {
+        printf("Error: Invalid bandwidth format '%s'\n", bandwidth_str);
+        return -1;
+    }
+    
+    // Check for unit suffix (iperf3 style)
+    if (*endptr != '\0') {
+        switch (*endptr) {
+            case 'G':
+            case 'g':
+                value *= 1000;  // Convert Gbps to Mbps
+                break;
+            case 'M':
+            case 'm':
+                // Already in Mbps
+                break;
+            case 'K':
+            case 'k':
+                value /= 1000;  // Convert Kbps to Mbps
+                break;
+            default:
+                printf("Error: Unknown bandwidth unit '%c'. Use K/M/G or plain number\n", *endptr);
+                return -1;
+        }
+    }
+    // If no unit, assume Mbps (speedtest-client style)
+    
+    if (value <= 0) {
+        printf("Error: Bandwidth must be greater than 0\n");
+        return -1;
+    }
+    
+    *bitrate_mbps = (uint64_t)value;
+    return 0;
+}
+
 // Print usage instructions
 void print_usage(const char* program_name) {
-    printf("Usage: %s [OPTIONS] <server_ip>\n\n", program_name);
+    printf("Usage: %s [OPTIONS] <server_ip>\n", program_name);
+    printf("       %s -c <server_ip> [OPTIONS]  (iperf3 compatible)\n\n", program_name);
     printf("Options:\n");
+    printf("  -c HOST     Connect to server HOST (iperf3 compatible)\n");
     printf("  -p PORT     Server port to connect to (default: 5202)\n");
     printf("  -t SECONDS  Test duration in seconds (default: 60)\n");
-    printf("  -b MBPS     Target bandwidth in Mbps (default: 100)\n");
+    printf("  -b RATE     Target bandwidth. Use K/M/G suffix or plain Mbps\n");
+    printf("              Examples: -b 100M, -b 1G, -b 200 (default: 100 Mbps)\n");
     printf("  -P STREAMS  Number of parallel streams (default: 4)\n");
     printf("  -J          Output results in JSON format\n");
+    printf("  -R          Reverse mode (not implemented yet)\n");
+    printf("  -h          Show this help\n");
     printf("\nExamples:\n");
-    printf("  # Basic usage (uses all defaults)\n");
-    printf("  %s 192.168.64.55\n\n", program_name);
-    printf("  # Specify test duration of 30 seconds\n");
-    printf("  %s -t 30 192.168.64.55\n\n", program_name);
-    printf("  # Combine multiple options\n");
-    printf("  %s -t 15 -b 200 -P 6 -p 5202 192.168.64.55\n", program_name);
-    printf("  # Save results in JSON format\n");
-    printf("  %s -J -t 5 192.168.64.55 > results.json\n", program_name);
+    printf("  # Speedtest-client style (legacy)\n");
+    printf("  %s 192.168.64.55\n", program_name);
+    printf("  %s -t 30 -b 200 192.168.64.55\n\n", program_name);
+    printf("  # iperf3 compatible style\n");
+    printf("  %s -c 192.168.64.55 -t 15 -b 200M\n", program_name);
+    printf("  %s -c 192.168.64.55 -p 5202 -P 6 -b 1G\n", program_name);
+    printf("  # JSON output\n");
+    printf("  %s -c 192.168.64.55 -J -t 5 > results.json\n", program_name);
 }
 
 // Output test results in JSON format
@@ -256,11 +305,15 @@ int main(int argc, char* argv[]) {
     };
     
     int opt;
+    int reverse_mode = 0;  // For future implementation
     t2_init("speedtest-client");
     
-    // Parse command line options
-    while ((opt = getopt(argc, argv, "p:t:b:P:Jh")) != -1) {
+    // ENHANCED: Parse command line options with iperf3 compatibility
+    while ((opt = getopt(argc, argv, "c:p:t:b:P:JhsRi:")) != -1) {
         switch (opt) {
+            case 'c':  // iperf3 client mode - server IP
+                config.server_ip = optarg;
+                break;
             case 'p':
                 config.port = atoi(optarg);
                 break;
@@ -268,7 +321,9 @@ int main(int argc, char* argv[]) {
                 config.duration = atoi(optarg);
                 break;
             case 'b':
-                config.bitrate_mbps = atoll(optarg);
+                if (parse_bandwidth(optarg, &config.bitrate_mbps) < 0) {
+                    return 1;
+                }
                 break;
             case 'P':
                 config.parallel_streams = atoi(optarg);
@@ -276,20 +331,37 @@ int main(int argc, char* argv[]) {
             case 'J':
                 config.json_output = 1;
                 break;
+            case 's':  // iperf3 server mode - not supported
+                printf("Error: Server mode (-s) is not supported in speedtest-client\n");
+                printf("This application is client-only for RDK integration purposes.\n");
+                return 1;
+            case 'R':  // iperf3 reverse mode - placeholder
+                printf("Warning: Reverse mode (-R) is not yet implemented\n");
+                reverse_mode = 1;
+                break;
+            case 'i':  // iperf3 interval reporting - ignore for now
+                printf("Info: Interval reporting (-i) option ignored (using 1 second default)\n");
+                break;
             case 'h':
                 print_usage(argv[0]);
                 return 0;
             default:
-                print_usage(argv[0]);
+                printf("Error: Unknown option '-%c'\n", optopt);
+                printf("Use -h for help\n");
                 return 1;
         }
     }
 
-    // The non-option argument should be the server IP
-    if (optind < argc) {
+    // Handle positional server IP (legacy speedtest-client format)
+    if (!config.server_ip && optind < argc) {
         config.server_ip = argv[optind];
-    } else {
-        print_usage(argv[0]);
+    }
+
+    // Validate we have a server IP
+    if (!config.server_ip) {
+        printf("Error: No server IP specified\n");
+        printf("Use either: %s server_ip                (legacy format)\n", argv[0]);
+        printf("Or:         %s -c server_ip            (iperf3 format)\n", argv[0]);
         return 1;
     }
 
