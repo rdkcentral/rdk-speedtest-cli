@@ -24,7 +24,7 @@ set(CMAKE_C_STANDARD 99)
 
 # Allow setting the executable name through CMake options
 if(NOT DEFINED EXECUTABLE_NAME)
-    set(EXECUTABLE_NAME "rdk-speedtest-cli")
+    set(EXECUTABLE_NAME "speedtest-client")
 endif()
 
 # Find the iperf3 library
