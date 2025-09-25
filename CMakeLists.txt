@@ -24,7 +24,7 @@ set(CMAKE_C_STANDARD 99)
 
 # Allow setting the executable name through CMake options
 if(NOT DEFINED EXECUTABLE_NAME)
-    set(EXECUTABLE_NAME "rdk-speedtest-cli")
+    set(EXECUTABLE_NAME "speedtest-client")
 endif()
 
 # Find the iperf3 library
@@ -44,14 +44,15 @@ message(STATUS "Found iperf3 library: ${IPERF_LIBRARY}")
 message(STATUS "Found iperf3 include dir: ${IPERF_INCLUDE_DIR}")
 
 # Include directories
-include_directories(include ${IPERF_INCLUDE_DIR})
-
+#include_directories(include ${IPERF_INCLUDE_DIR})
+include_directories(include ${IPERF_INCLUDE_DIR} /usr/include/rtmessage)
 # Add the executable with configurable name
 add_executable(${EXECUTABLE_NAME} source/rdk-speedtest-cli.c)
 
 # Link against the iperf3 library
-target_link_libraries(${EXECUTABLE_NAME} ${IPERF_LIBRARY})
-
+#target_link_libraries(${EXECUTABLE_NAME} ${IPERF_LIBRARY})
+# Link against all required libraries
+target_link_libraries(${EXECUTABLE_NAME} ${IPERF_LIBRARY} rbus rbuscore telemetry_msgsender)
 # Install the binary
 install(TARGETS ${EXECUTABLE_NAME}
         RUNTIME DESTINATION bin)
